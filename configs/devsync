@@ -1,0 +1,4 @@
+USER='alex'
+HOST='codf.co'
+LOCAL_DIR='/home/alex/work/'
+REMOTE_DIR='/home/alex/work/'

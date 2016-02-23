@@ -1,0 +1,197 @@
+#!/bin/bash
+
+CONFIG_FILE_DIR='~/devsync/'
+CONFIG_FILE='devsync'
+USER=''
+HOST=''
+LOCAL_DIR=''
+REMOTE_DIR=''
+PARAMS='-avzP --del --exclude cache/ --exclude .metadata/'
+
+usage="$(basename "$0") [opts] [PROJECT_NAME]-- Sync project to/from devserver\n\n
+-h, --help\n\t  show this help text\n
+-p, --project PROJECT_NAME\n\t  Set project name to sync\n
+-d, --delete-cache\n\t  Selete Stingle cache after sync\n
+-r, --reverse\n\t  Do a reverse sync. Sync dev server to local copy\n
+-f, --fix-perms\n\t Fix project permissions\n
+-u, --user\n\t Override user\n
+-z, --host\n\t Override host\n
+-l, --local-dir\n\t Override local dir path\n
+-w, --remote-dir\n\t Override remote dir path\n
+-o, --params\n\t Override rsync params\n
+-c, --config\n\t Config file name. Default: $CONFIG_FILE\n
+-q, --config-dir\n\t Config file dir. Default: $CONFIG_FILE_DIR"
+
+delete_cache=false
+is_reverse=false
+fix_permissions=false
+no_sync=false
+projectName=""
+
+# If no arguments given print help text
+if [ $# -eq 0 ]; then
+    echo -e $usage
+    exit 1
+fi
+
+OPTS=`getopt -o hp:drfnu:z:l:w:o:c:q: --long help,project:,delete-cache,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
+
+if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
+
+eval set -- "$OPTS"
+
+tmp_user=""
+tmp_host=""
+tmp_ld=""
+tmp_rd=""
+
+# Parse command line arguments
+while true; do
+    case $1 in
+        -h|--help)
+            echo -e $usage
+            shift
+            exit
+            ;;
+        -p|--project)
+            projectName=$2
+            shift
+            shift
+            ;;
+        -d|--delete-cache)
+            delete_cache=true
+            shift
+            ;;
+        -r|--reverse)
+            is_reverse=true
+            shift
+            ;;
+        -f|--fix-perms)
+            fix_permissions=true
+            shift
+            ;;
+        -n|--no-sync)
+            no_sync=true
+            shift
+            ;;
+        -u|--user)
+            tmp_user=$2
+            shift
+            shift
+            ;;
+        -z|--host)
+            tmp_host=$2
+            shift
+            shift
+            ;;
+        -l|--local-dir)
+            tmp_ld=$2
+            shift
+            shift
+            ;;
+        -w|--remote-dir)
+            tmp_rd=$2
+            shift
+            shift
+            ;;
+        -o|--params)
+            PARAMS=$2
+            shift
+            shift
+            ;;
+        -c|--config)
+            CONFIG_FILE=$2
+            shift
+            shift
+            ;;
+        -q|--config-dir)
+            CONFIG_FILE_DIR=$2
+            shift
+            shift
+            ;;
+        --) 
+            shift 
+            break 
+            ;;
+        *)
+            break 
+            ;;
+    esac
+done
+
+
+CONFIG_FILE_DIR=${CONFIG_FILE_DIR%/}
+
+eval CONFIG_FILE_DIR=$CONFIG_FILE_DIR
+source "$CONFIG_FILE_DIR/$CONFIG_FILE"
+
+LOCAL_DIR=${LOCAL_DIR%/}
+REMOTE_DIR=${REMOTE_DIR%/}
+
+if [ ! -z $tmp_user ]; then USER=$tmp_user; fi
+if [ ! -z $tmp_host ]; then HOST=$tmp_host; fi
+if [ ! -z $tmp_ld ]; then LOCAL_DIR=$tmp_ld; fi
+if [ ! -z $tmp_rd ]; then REMOTE_DIR=$tmp_rd; fi
+
+# Do config check
+if [ -z $USER ]; then
+    echo "Error: no user specified"
+    exit 1;
+fi
+if [ -z $HOST ]; then
+    echo "Error: no host specified"
+    exit 1;
+fi
+if [ -z $LOCAL_DIR ]; then
+    echo "Error: no local dir specified"
+    exit 1;
+fi
+if [ -z $REMOTE_DIR ]; then
+    echo "Error: no remote dir specified"
+    exit 1;
+fi
+
+# Set project name is specified as last argument
+if [ -z "$projectName" ]; then
+    if [ ! -z "$1" ]; then
+        projectName=$1
+    else
+        echo "Error: No project specified!"
+        exit 1;
+    fi
+fi
+
+# Do rsync if allowed
+if [ "$no_sync" = false ] ; then
+    if [ "$is_reverse" = true ] ; then
+        echo -e "\nSyncing from Dev server to local copy\n"
+        rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
+    else
+        echo -e "\nSyncing from local copy to Dev server\n"
+        rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
+    fi
+fi
+
+# Delete cache
+if [ "$delete_cache" = true ] ; then
+    if [ "$is_reverse" = true ] ; then
+        echo -e "\nDeleting local Stingle cache\n"
+        rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
+    else
+        echo -e "\nDeleting Dev server Stingle cache\n"
+        ssh $USER@$HOST rm -fv $REMOTE_DIR/$projectName/cache/stingle_cache/*
+    fi
+fi
+
+# Fix permissions
+if [ "$fix_permissions" = true ] ; then
+    if [ "$is_reverse" = true ] ; then
+        echo -e "\nFixing local project permissions\n"
+        chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
+    else
+        echo -e "\nFixing Dev server project permissions\n"
+        ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName && chmod 777 -R $REMOTE_DIR/$projectName/cache"
+    fi
+    exit 0;
+fi
+
