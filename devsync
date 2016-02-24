@@ -8,10 +8,9 @@ LOCAL_DIR=''
 REMOTE_DIR=''
 PARAMS='-avzP --del --exclude cache/ --exclude .metadata/'
 
-usage="$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n
-Sync project to/from devserver\n\n
+usage="Sync project to/from devserver\n\n$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n\n
 -h, --help\n\t  show this help text\n
--d, --delete-cache\n\t  Selete Stingle cache after sync\n
+-d, --delete-cache\n\t  Delete Stingle cache after sync\n
 -r, --reverse\n\t  Do a reverse sync. Sync dev server to local copy\n
 -f, --fix-perms\n\t Fix project permissions\n
 -n, --no-sync\n\t Do not make sync, just do other stuff\n
@@ -151,7 +150,7 @@ for projectName in "${projects[@]}"; do
             chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
         else
             echo -e "\n$projectName: Fixing Dev server project permissions\n"
-            ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName && chmod 777 -R $REMOTE_DIR/$projectName/cache"
+            ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName ; chmod 777 -R $REMOTE_DIR/$projectName/cache"
         fi
     fi
 done
