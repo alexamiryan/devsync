@@ -11,30 +11,29 @@ Setup:
 
 Help:
 
-devsync [opts] PROJECT_NAME [PROJECT_NAME] ...
+	devsync [opts] PROJECT_NAME [PROJECT_NAME] ...
 
- -h, --help
-	 show this help text
- -d, --delete-cache
-	 Selete Stingle cache after sync
- -r, --reverse
-	 Do a reverse sync. Sync dev server to local copy
- -f, --fix-perms
-	 Fix project permissions
- -n, --no-sync
-	 Do not make sync, just do other stuff
- -u, --user
-	 Override user
- -z, --host
-	 Override host
- -l, --local-dir
-	 Override local dir path
- -w, --remote-dir
-	 Override remote dir path
- -p, --params
-	 Override rsync params
- -c, --config
-	 Config file name. Default: default
- -q, --config-dir
-	 Config file dir. Default: ~/devsync/
-
+	-h, --help
+		show this help text
+	-d, --delete-cache
+		Selete Stingle cache after sync
+	-r, --reverse
+		Do a reverse sync. Sync dev server to local copy
+	-f, --fix-perms
+		Fix project permissions
+	-n, --no-sync
+		Do not make sync, just do other stuff
+	-u, --user
+		Override user
+	-z, --host
+		Override host
+	-l, --local-dir
+		Override local dir path
+	-w, --remote-dir
+		Override remote dir path
+	-p, --params
+		Override rsync params
+	-c, --config
+		Config file name. Default: default
+	-q, --config-dir
+		Config file dir. Default: ~/devsync/
