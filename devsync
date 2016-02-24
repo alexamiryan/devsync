@@ -8,17 +8,18 @@ LOCAL_DIR=''
 REMOTE_DIR=''
 PARAMS='-avzP --del --exclude cache/ --exclude .metadata/'
 
-usage="$(basename "$0") [opts] [PROJECT_NAME]-- Sync project to/from devserver\n\n
+usage="$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n
+Sync project to/from devserver\n\n
 -h, --help\n\t  show this help text\n
--p, --project PROJECT_NAME\n\t  Set project name to sync\n
 -d, --delete-cache\n\t  Selete Stingle cache after sync\n
 -r, --reverse\n\t  Do a reverse sync. Sync dev server to local copy\n
 -f, --fix-perms\n\t Fix project permissions\n
+-n, --no-sync\n\t Do not make sync, just do other stuff\n
 -u, --user\n\t Override user\n
 -z, --host\n\t Override host\n
 -l, --local-dir\n\t Override local dir path\n
 -w, --remote-dir\n\t Override remote dir path\n
--o, --params\n\t Override rsync params\n
+-p, --params\n\t Override rsync params\n
 -c, --config\n\t Config file name. Default: $CONFIG_FILE\n
 -q, --config-dir\n\t Config file dir. Default: $CONFIG_FILE_DIR"
 
@@ -26,7 +27,7 @@ delete_cache=false
 is_reverse=false
 fix_permissions=false
 no_sync=false
-projectName=""
+projects=()
 
 # If no arguments given print help text
 if [ $# -eq 0 ]; then
@@ -34,7 +35,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-OPTS=`getopt -o hp:drfnu:z:l:w:o:c:q: --long help,project:,delete-cache,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
+OPTS=`getopt -o hdrfnu:z:l:w:p:c:q: --long help,delete-cache,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
 
 if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
 
@@ -48,86 +49,35 @@ tmp_rd=""
 # Parse command line arguments
 while true; do
     case $1 in
-        -h|--help)
-            echo -e $usage
-            shift
-            exit
-            ;;
-        -p|--project)
-            projectName=$2
-            shift
-            shift
-            ;;
-        -d|--delete-cache)
-            delete_cache=true
-            shift
-            ;;
-        -r|--reverse)
-            is_reverse=true
-            shift
-            ;;
-        -f|--fix-perms)
-            fix_permissions=true
-            shift
-            ;;
-        -n|--no-sync)
-            no_sync=true
-            shift
-            ;;
-        -u|--user)
-            tmp_user=$2
-            shift
-            shift
-            ;;
-        -z|--host)
-            tmp_host=$2
-            shift
-            shift
-            ;;
-        -l|--local-dir)
-            tmp_ld=$2
-            shift
-            shift
-            ;;
-        -w|--remote-dir)
-            tmp_rd=$2
-            shift
-            shift
-            ;;
-        -o|--params)
-            PARAMS=$2
-            shift
-            shift
-            ;;
-        -c|--config)
-            CONFIG_FILE=$2
-            shift
-            shift
-            ;;
-        -q|--config-dir)
-            CONFIG_FILE_DIR=$2
-            shift
-            shift
-            ;;
-        --) 
-            shift 
-            break 
-            ;;
-        *)
-            break 
-            ;;
+        -h|--help) echo -e $usage; shift; exit ;;
+        -d|--delete-cache) delete_cache=true; shift ;;
+        -r|--reverse) is_reverse=true; shift ;;
+        -f|--fix-perms) fix_permissions=true; shift ;;
+        -n|--no-sync) no_sync=true; shift ;;
+        -u|--user) tmp_user=$2; shift; shift ;;
+        -z|--host) tmp_host=$2; shift; shift ;;
+        -l|--local-dir) tmp_ld=$2; shift; shift ;;
+        -w|--remote-dir) tmp_rd=$2; shift; shift ;;
+        -p|--params) PARAMS=$2; shift; shift ;;
+        -c|--config) CONFIG_FILE=$2; shift; shift ;;
+        -q|--config-dir) CONFIG_FILE_DIR=$2; shift; shift ;;
+        --) shift; break ;;
+        *) break ;;
     esac
 done
 
-
+# Remove trailing slash from config dir
 CONFIG_FILE_DIR=${CONFIG_FILE_DIR%/}
 
+# Get configs from config file
 eval CONFIG_FILE_DIR=$CONFIG_FILE_DIR
 source "$CONFIG_FILE_DIR/$CONFIG_FILE"
 
+# Remove trailing slashes
 LOCAL_DIR=${LOCAL_DIR%/}
 REMOTE_DIR=${REMOTE_DIR%/}
 
+# Override configs from command line if specified
 if [ ! -z $tmp_user ]; then USER=$tmp_user; fi
 if [ ! -z $tmp_host ]; then HOST=$tmp_host; fi
 if [ ! -z $tmp_ld ]; then LOCAL_DIR=$tmp_ld; fi
@@ -151,47 +101,57 @@ if [ -z $REMOTE_DIR ]; then
     exit 1;
 fi
 
-# Set project name is specified as last argument
-if [ -z "$projectName" ]; then
+# Get project name
+while true; do
     if [ ! -z "$1" ]; then
-        projectName=$1
+        if [ -d $LOCAL_DIR/$1 ]; then
+            projects=("${projects[@]}" "$1")
+        else
+            echo "Warning: folder with name \"$1\" not found in your local directory!"
+        fi
+        shift
     else
-        echo "Error: No project specified!"
-        exit 1;
+        break;
     fi
+done
+
+if [ ${#projects[@]} = 0 ]; then
+    echo "Error: No project specified!"
+    exit 1;
 fi
 
-# Do rsync if allowed
-if [ "$no_sync" = false ] ; then
-    if [ "$is_reverse" = true ] ; then
-        echo -e "\nSyncing from Dev server to local copy\n"
-        rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
-    else
-        echo -e "\nSyncing from local copy to Dev server\n"
-        rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
+# Do the job for all selected projects
+for projectName in "${projects[@]}"; do
+    # Do rsync if allowed
+    if [ "$no_sync" = false ] ; then
+        if [ "$is_reverse" = true ] ; then
+            echo -e "\n$projectName: Syncing from Dev server to local copy\n"
+            rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
+        else
+            echo -e "\n$projectName: Syncing from local copy to Dev server\n"
+            rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
+        fi
     fi
-fi
 
-# Delete cache
-if [ "$delete_cache" = true ] ; then
-    if [ "$is_reverse" = true ] ; then
-        echo -e "\nDeleting local Stingle cache\n"
-        rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
-    else
-        echo -e "\nDeleting Dev server Stingle cache\n"
-        ssh $USER@$HOST rm -fv $REMOTE_DIR/$projectName/cache/stingle_cache/*
+    # Delete cache
+    if [ "$delete_cache" = true ] ; then
+        if [ "$is_reverse" = true ] ; then
+            echo -e "\n$projectName: Deleting local Stingle cache\n"
+            rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
+        else
+            echo -e "\n$projectName: Deleting Dev server Stingle cache\n"
+            ssh $USER@$HOST rm -fv $REMOTE_DIR/$projectName/cache/stingle_cache/*
+        fi
     fi
-fi
 
-# Fix permissions
-if [ "$fix_permissions" = true ] ; then
-    if [ "$is_reverse" = true ] ; then
-        echo -e "\nFixing local project permissions\n"
-        chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
-    else
-        echo -e "\nFixing Dev server project permissions\n"
-        ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName && chmod 777 -R $REMOTE_DIR/$projectName/cache"
+    # Fix permissions
+    if [ "$fix_permissions" = true ] ; then
+        if [ "$is_reverse" = true ] ; then
+            echo -e "\n$projectName: Fixing local project permissions\n"
+            chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
+        else
+            echo -e "\n$projectName: Fixing Dev server project permissions\n"
+            ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName && chmod 777 -R $REMOTE_DIR/$projectName/cache"
+        fi
     fi
-    exit 0;
-fi
-
+done
