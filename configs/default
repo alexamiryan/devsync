@@ -1,4 +1,4 @@
-USER='alex'
-HOST='codf.co'
-LOCAL_DIR='/home/alex/work/'
-REMOTE_DIR='/home/alex/work/'
+USER='user'
+HOST='example.com'
+LOCAL_DIR='/home/user/work/'
+REMOTE_DIR='/home/user/work/'
