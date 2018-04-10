@@ -10,7 +10,9 @@ PARAMS='-avzP --del --exclude cache/ --exclude .metadata/'
 
 usage="Sync project to/from devserver\n\n$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n\n
 -h, --help\n\t  show this help text\n
--d, --delete-cache\n\t  Delete Stingle cache after sync\n
+-d, --delete-cache\n\t  Run Stingle deleteCache script\n
+-y, --composer\n\t  Used only with -d. Runs also composer update\n
+-v, --legacy-delete\n\t  Delete Stingle cache after sync\n
 -r, --reverse\n\t  Do a reverse sync. Sync dev server to local copy\n
 -f, --fix-perms\n\t Fix project permissions\n
 -n, --no-sync\n\t Do not make sync, just do other stuff\n
@@ -22,7 +24,9 @@ usage="Sync project to/from devserver\n\n$(basename "$0") [opts] PROJECT_NAME [P
 -c, --config\n\t Config file name. Default: $CONFIG_FILE\n
 -q, --config-dir\n\t Config file dir. Default: $CONFIG_FILE_DIR"
 
+composer=false
 delete_cache=false
+legacy_delete=false
 is_reverse=false
 fix_permissions=false
 no_sync=false
@@ -34,7 +38,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-OPTS=`getopt -o hdrfnu:z:l:w:p:c:q: --long help,delete-cache,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
+OPTS=`getopt -o hdyvrfnu:z:l:w:p:c:q: --long help,delete-cache,composer,legacy-delete,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
 
 if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
 
@@ -50,6 +54,8 @@ while true; do
     case $1 in
         -h|--help) echo -e $usage; shift; exit ;;
         -d|--delete-cache) delete_cache=true; shift ;;
+        -y|--composer) composer=true; shift ;;
+        -v|--legacy-delete) legacy_delete=true; shift ;;
         -r|--reverse) is_reverse=true; shift ;;
         -f|--fix-perms) fix_permissions=true; shift ;;
         -n|--no-sync) no_sync=true; shift ;;
@@ -132,8 +138,20 @@ for projectName in "${projects[@]}"; do
         fi
     fi
 
-    # Delete cache
+    # Run update script
     if [ "$delete_cache" = true ] ; then
+        if [ "$is_reverse" = false ] ; then
+            echo -e "\n$projectName: Running Stingle delete cache script\n"
+	    if [ "$composer" = true ] ; then
+		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache composer=1"
+	    else
+		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache"
+	    fi
+        fi
+    fi
+
+    # Delete cache legacy
+    if [ "$legacy_delete" = true ] ; then
         if [ "$is_reverse" = true ] ; then
             echo -e "\n$projectName: Deleting local Stingle cache\n"
             rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
