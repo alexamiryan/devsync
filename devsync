@@ -6,7 +6,7 @@ USER=''
 HOST=''
 LOCAL_DIR=''
 REMOTE_DIR=''
-PARAMS='-avzP --del --exclude cache/ --exclude .metadata/'
+PARAMS='-avzP --del --exclude configsSite/ --exclude cache/ --exclude .metadata/ --exclude uploads/'
 
 usage="Sync project to/from devserver\n\n$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n\n
 -h, --help\n\t  show this help text\n
@@ -134,6 +134,7 @@ for projectName in "${projects[@]}"; do
             rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
         else
             echo -e "\n$projectName: Syncing from local copy to Dev server\n"
+			#echo -e "rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/"
             rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
         fi
     fi
@@ -143,9 +144,9 @@ for projectName in "${projects[@]}"; do
         if [ "$is_reverse" = false ] ; then
             echo -e "\n$projectName: Running Stingle delete cache script\n"
 	    if [ "$composer" = true ] ; then
-		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache composer=1"
+		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache composer=1 rmcache=1"
 	    else
-		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache"
+		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache rmcache=1"
 	    fi
         fi
     fi
