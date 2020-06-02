@@ -6,7 +6,10 @@ USER=''
 HOST=''
 LOCAL_DIR=''
 REMOTE_DIR=''
-PARAMS='-avzP --del --exclude configsSite/ --exclude cache/ --exclude .metadata/ --exclude uploads/'
+EXCLUDES=''
+PARAMS="-avzP --del --exclude configsSite/ --exclude cache/ --exclude .metadata/ --exclude uploads/ --exclude .idea/ $EXCLUDES"
+CLEAR_CACHE_WITH_COMPOSER='./cgi.php module=tools page=deleteCache composer=1 rmcache=1'
+CLEAR_CACHE='./cgi.php module=tools page=deleteCache rmcache=1'
 
 usage="Sync project to/from devserver\n\n$(basename "$0") [opts] PROJECT_NAME [PROJECT_NAME] ...\n\n
 -h, --help\n\t  show this help text\n
@@ -34,13 +37,16 @@ projects=()
 
 # If no arguments given print help text
 if [ $# -eq 0 ]; then
-    echo -e $usage
-    exit 1
+  echo -e $usage
+  exit 1
 fi
 
-OPTS=`getopt -o hdyvrfnu:z:l:w:p:c:q: --long help,delete-cache,composer,legacy-delete,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@"`
+OPTS=$(getopt -o hdyvrfnu:z:l:w:p:c:q: --long help,delete-cache,composer,legacy-delete,reverse,fix-perms,no-sync,user:,host:,local-dir:,remote-dir:,params:,config:,config-dir: -n 'parse-options' -- "$@")
 
-if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
+if [ $? != 0 ]; then
+  echo "Failed parsing options." >&2
+  exit 1
+fi
 
 eval set -- "$OPTS"
 
@@ -51,24 +57,77 @@ tmp_rd=""
 
 # Parse command line arguments
 while true; do
-    case $1 in
-        -h|--help) echo -e $usage; shift; exit ;;
-        -d|--delete-cache) delete_cache=true; shift ;;
-        -y|--composer) composer=true; shift ;;
-        -v|--legacy-delete) legacy_delete=true; shift ;;
-        -r|--reverse) is_reverse=true; shift ;;
-        -f|--fix-perms) fix_permissions=true; shift ;;
-        -n|--no-sync) no_sync=true; shift ;;
-        -u|--user) tmp_user=$2; shift; shift ;;
-        -z|--host) tmp_host=$2; shift; shift ;;
-        -l|--local-dir) tmp_ld=$2; shift; shift ;;
-        -w|--remote-dir) tmp_rd=$2; shift; shift ;;
-        -p|--params) PARAMS=$2; shift; shift ;;
-        -c|--config) CONFIG_FILE=$2; shift; shift ;;
-        -q|--config-dir) CONFIG_FILE_DIR=$2; shift; shift ;;
-        --) shift; break ;;
-        *) break ;;
-    esac
+  case $1 in
+  -h | --help)
+    echo -e $usage
+    shift
+    exit
+    ;;
+  -d | --delete-cache)
+    delete_cache=true
+    shift
+    ;;
+  -y | --composer)
+    composer=true
+    shift
+    ;;
+  -v | --legacy-delete)
+    legacy_delete=true
+    shift
+    ;;
+  -r | --reverse)
+    is_reverse=true
+    shift
+    ;;
+  -f | --fix-perms)
+    fix_permissions=true
+    shift
+    ;;
+  -n | --no-sync)
+    no_sync=true
+    shift
+    ;;
+  -u | --user)
+    tmp_user=$2
+    shift
+    shift
+    ;;
+  -z | --host)
+    tmp_host=$2
+    shift
+    shift
+    ;;
+  -l | --local-dir)
+    tmp_ld=$2
+    shift
+    shift
+    ;;
+  -w | --remote-dir)
+    tmp_rd=$2
+    shift
+    shift
+    ;;
+  -p | --params)
+    PARAMS=$2
+    shift
+    shift
+    ;;
+  -c | --config)
+    CONFIG_FILE=$2
+    shift
+    shift
+    ;;
+  -q | --config-dir)
+    CONFIG_FILE_DIR=$2
+    shift
+    shift
+    ;;
+  --)
+    shift
+    break
+    ;;
+  *) break ;;
+  esac
 done
 
 # Remove trailing slash from config dir
@@ -90,86 +149,86 @@ if [ ! -z $tmp_rd ]; then REMOTE_DIR=$tmp_rd; fi
 
 # Do config check
 if [ -z $USER ]; then
-    echo "Error: no user specified"
-    exit 1;
+  echo "Error: no user specified"
+  exit 1
 fi
 if [ -z $HOST ]; then
-    echo "Error: no host specified"
-    exit 1;
+  echo "Error: no host specified"
+  exit 1
 fi
 if [ -z $LOCAL_DIR ]; then
-    echo "Error: no local dir specified"
-    exit 1;
+  echo "Error: no local dir specified"
+  exit 1
 fi
 if [ -z $REMOTE_DIR ]; then
-    echo "Error: no remote dir specified"
-    exit 1;
+  echo "Error: no remote dir specified"
+  exit 1
 fi
 
 # Get project name
 while true; do
-    if [ ! -z "$1" ]; then
-        if [ -d $LOCAL_DIR/$1 ]; then
-            projects=("${projects[@]}" "$1")
-        else
-            echo "Warning: folder with name \"$1\" not found in your local directory!"
-        fi
-        shift
+  if [ ! -z "$1" ]; then
+    if [ -d $LOCAL_DIR/$1 ]; then
+      projects=("${projects[@]}" "$1")
     else
-        break;
+      echo "Warning: folder with name \"$1\" not found in your local directory!"
     fi
+    shift
+  else
+    break
+  fi
 done
 
 if [ ${#projects[@]} = 0 ]; then
-    echo "Error: No project specified!"
-    exit 1;
+  echo "Error: No project specified!"
+  exit 1
 fi
 
 # Do the job for all selected projects
 for projectName in "${projects[@]}"; do
-    # Do rsync if allowed
-    if [ "$no_sync" = false ] ; then
-        if [ "$is_reverse" = true ] ; then
-            echo -e "\n$projectName: Syncing from Dev server to local copy\n"
-            rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
-        else
-            echo -e "\n$projectName: Syncing from local copy to Dev server\n"
-			#echo -e "rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/"
-            rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
-        fi
+  # Do rsync if allowed
+  if [ "$no_sync" = false ]; then
+    if [ "$is_reverse" = true ]; then
+      echo -e "\n$projectName: Syncing from Dev server to local copy\n"
+      rsync $PARAMS $USER@$HOST:$REMOTE_DIR/$projectName/ $LOCAL_DIR/$projectName/
+    else
+      echo -e "\n$projectName: Syncing from local copy to Dev server\n"
+      #echo -e "rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/"
+      rsync $PARAMS $LOCAL_DIR/$projectName/ $USER@$HOST:$REMOTE_DIR/$projectName/
     fi
+  fi
 
-    # Run update script
-    if [ "$delete_cache" = true ] ; then
-        if [ "$is_reverse" = false ] ; then
-            echo -e "\n$projectName: Running Stingle delete cache script\n"
-	    if [ "$composer" = true ] ; then
-		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache composer=1 rmcache=1"
-	    else
-		ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && ./cgi.php module=tools page=deleteCache rmcache=1"
-	    fi
-        fi
+  # Run update script
+  if [ "$delete_cache" = true ]; then
+    if [ "$is_reverse" = false ]; then
+      echo -e "\n$projectName: Running Stingle delete cache script\n"
+      if [ "$composer" = true ]; then
+        ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && $CLEAR_CACHE_WITH_COMPOSER"
+      else
+        ssh $USER@$HOST "cd $REMOTE_DIR/$projectName/ && $CLEAR_CACHE"
+      fi
     fi
+  fi
 
-    # Delete cache legacy
-    if [ "$legacy_delete" = true ] ; then
-        if [ "$is_reverse" = true ] ; then
-            echo -e "\n$projectName: Deleting local Stingle cache\n"
-            rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
-        else
-            echo -e "\n$projectName: Deleting Dev server Stingle cache\n"
-            ssh $USER@$HOST rm -fv $REMOTE_DIR/$projectName/cache/stingle_cache/*
-        fi
+  # Delete cache legacy
+  if [ "$legacy_delete" = true ]; then
+    if [ "$is_reverse" = true ]; then
+      echo -e "\n$projectName: Deleting local Stingle cache\n"
+      rm -fv $LOCAL_DIR/$projectName/cache/stingle_cache/*
+    else
+      echo -e "\n$projectName: Deleting Dev server Stingle cache\n"
+      ssh $USER@$HOST rm -fv $REMOTE_DIR/$projectName/cache/stingle_cache/*
     fi
+  fi
 
-    # Fix permissions
-    if [ "$fix_permissions" = true ] ; then
-        if [ "$is_reverse" = true ] ; then
-            echo -e "\n$projectName: Fixing local project permissions\n"
-            chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
-        else
-            echo -e "\n$projectName: Fixing Dev server project permissions\n"
-            ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName ; chmod 777 -R $REMOTE_DIR/$projectName/cache"
-        fi
+  # Fix permissions
+  if [ "$fix_permissions" = true ]; then
+    if [ "$is_reverse" = true ]; then
+      echo -e "\n$projectName: Fixing local project permissions\n"
+      chmod 755 -R $LOCAL_DIR/$projectName && chmod 777 -R $LOCAL_DIR/$projectName/cache
+    else
+      echo -e "\n$projectName: Fixing Dev server project permissions\n"
+      ssh $USER@$HOST "chmod 755 -R $REMOTE_DIR/$projectName ; chmod 777 -R $REMOTE_DIR/$projectName/cache"
     fi
+  fi
 done
